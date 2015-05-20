@@ -30,6 +30,7 @@
 #include "renderer/CCGLProgramState.h"
 #include "renderer/CCGLProgramCache.h"
 #include "renderer/CCVertexIndexBuffer.h"
+#include "renderer/CCVertexAttribBinding.h"
 #include "base/CCDirector.h"
 #include "3d/CCSprite3D.h"
 #include "2d/CCCamera.h"
@@ -60,15 +61,12 @@ Particle3DQuadRender* Particle3DQuadRender::create(const std::string& texFile)
     if (ret && ret->initQuadRender(texFile))
     {
         ret->autorelease();
-        return ret;
     }
     else
     {
-        delete ret;
-        ret = nullptr;
+        CC_SAFE_DELETE(ret);
     }
-    CC_SAFE_DELETE(ret);
-    
+
     return ret;
 }
 
@@ -99,7 +97,7 @@ void Particle3DQuadRender::render(Renderer* renderer, const Mat4 &transform, Par
         }
         _indexBuffer->retain();
     }
-    ParticlePool::PoolList activeParticleList = particlePool.getActiveParticleList();
+    ParticlePool::PoolList activeParticleList = particlePool.getActiveDataList();
     if (_posuvcolors.size() < activeParticleList.size() * 4)
     {
         _posuvcolors.resize(activeParticleList.size() * 4);
@@ -127,19 +125,19 @@ void Particle3DQuadRender::render(Renderer* renderer, const Mat4 &transform, Par
         position = particle->position;
         _posuvcolors[vertexindex].position = (position + (- halfwidth - halfheight));
         _posuvcolors[vertexindex].color = particle->color;
-        _posuvcolors[vertexindex].uv = Vec2(particle->lb_uv);
+        _posuvcolors[vertexindex].uv.set(particle->lb_uv);
 
         _posuvcolors[vertexindex + 1].position = (position + (halfwidth - halfheight));
         _posuvcolors[vertexindex + 1].color = particle->color;
-        _posuvcolors[vertexindex + 1].uv = Vec2(particle->rt_uv.x, particle->lb_uv.y);
+        _posuvcolors[vertexindex + 1].uv.set(particle->rt_uv.x, particle->lb_uv.y);
         
         _posuvcolors[vertexindex + 2].position = (position + (- halfwidth + halfheight));
         _posuvcolors[vertexindex + 2].color = particle->color;
-        _posuvcolors[vertexindex + 2].uv = Vec2(particle->lb_uv.x, particle->rt_uv.y);
+        _posuvcolors[vertexindex + 2].uv.set(particle->lb_uv.x, particle->rt_uv.y);
         
         _posuvcolors[vertexindex + 3].position = (position + (halfwidth + halfheight));
         _posuvcolors[vertexindex + 3].color = particle->color;
-        _posuvcolors[vertexindex + 3].uv = Vec2(particle->rt_uv);
+        _posuvcolors[vertexindex + 3].uv.set(particle->rt_uv);
         
         
         _indexData[index] = vertexindex;
@@ -162,6 +160,7 @@ void Particle3DQuadRender::render(Renderer* renderer, const Mat4 &transform, Par
     GLuint texId = (_texture ? _texture->getName() : 0);
     float depthZ = -(viewMat.m[2] * transform.m[12] + viewMat.m[6] * transform.m[13] + viewMat.m[10] * transform.m[14] + viewMat.m[14]);
     _meshCommand->init(depthZ, texId, _glProgramState, particleSystem->getBlendFunc(), _vertexBuffer->getVBO(), _indexBuffer->getVBO(), GL_TRIANGLES, GL_UNSIGNED_SHORT, index, transform, 0);
+    _glProgramState->setUniformVec4("u_color", Vec4(1,1,1,1));
     renderer->addCommand(_meshCommand);
 }
 
@@ -192,13 +191,12 @@ bool Particle3DQuadRender::initQuadRender( const std::string& texFile )
     //ret->_indexBuffer = IndexBuffer::create(IndexBuffer::IndexType::INDEX_TYPE_SHORT_16, 6 * 10000);
     //ret->_indexBuffer->retain();
 
-    _meshCommand = new (std::nothrow)MeshCommand();
+    _meshCommand = new (std::nothrow) MeshCommand();
     _meshCommand->setTransparent(true);
     _meshCommand->setDepthTestEnabled(_depthTest);
     _meshCommand->setDepthWriteEnabled(_depthWrite);
     _meshCommand->setCullFace(GL_BACK);
     _meshCommand->setCullFaceEnabled(true);
-    
     return true;
 }
 
@@ -244,6 +242,11 @@ void Particle3DModelRender::render(Renderer* renderer, const Mat4 &transform, Pa
     if (_spriteList.empty()){
         for (unsigned int i = 0; i < particleSystem->getParticleQuota(); ++i){
             Sprite3D *sprite = Sprite3D::create(_modelFile);
+            if (sprite == nullptr)
+            {
+                CCLOG("failed to load file %s", _modelFile.c_str());
+                continue;
+            }
             sprite->setTexture(_texFile);
             sprite->retain();
             _spriteList.push_back(sprite);
@@ -258,17 +261,17 @@ void Particle3DModelRender::render(Renderer* renderer, const Mat4 &transform, Pa
 
 
     const ParticlePool& particlePool = particleSystem->getParticlePool();
-    ParticlePool::PoolList activeParticleList = particlePool.getActiveParticleList();
+    ParticlePool::PoolList activeParticleList = particlePool.getActiveDataList();
     Mat4 mat;
     Mat4 rotMat;
     Mat4 sclMat;
     Quaternion q;
     transform.decompose(nullptr, &q, nullptr);
-    for (unsigned int i = 0; i < activeParticleList.size(); ++i)
+    unsigned int index = 0;
+    for (auto iter : activeParticleList)
     {
-        auto particle = activeParticleList[i];
-        q *= particle->orientation;
-        Mat4::createRotation(q, &rotMat);
+        auto particle = iter;
+        Mat4::createRotation(q * particle->orientation, &rotMat);
         sclMat.m[0] = particle->width / _spriteSize.x;
         sclMat.m[5]  = particle->height / _spriteSize.y; 
         sclMat.m[10] = particle->depth / _spriteSize.z;
@@ -276,17 +279,17 @@ void Particle3DModelRender::render(Renderer* renderer, const Mat4 &transform, Pa
         mat.m[12] = particle->position.x;
         mat.m[13] = particle->position.y;
         mat.m[14] = particle->position.z;
-        _spriteList[i]->draw(renderer, mat, 0);
+        _spriteList[index++]->draw(renderer, mat, 0);
     }
 }
 
 
-void Particle3DRender::notifyStart( void )
+void Particle3DRender::notifyStart()
 {
     setVisible(true);
 }
 
-void Particle3DRender::notifyStop( void )
+void Particle3DRender::notifyStop()
 {
     setVisible(false);
 }

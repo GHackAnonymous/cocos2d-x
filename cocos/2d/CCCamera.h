@@ -26,6 +26,8 @@ THE SOFTWARE.
 
 #include "2d/CCNode.h"
 #include "3d/CCFrustum.h"
+#include "renderer/CCQuadCommand.h"
+#include "renderer/CCCustomCommand.h"
 
 NS_CC_BEGIN
 
@@ -83,7 +85,6 @@ public:
     *
     * @param zoomX The zoom factor along the X-axis of the orthographic projection (the width of the ortho projection).
     * @param zoomY The zoom factor along the Y-axis of the orthographic projection (the height of the ortho projection).
-    * @param aspectRatio The aspect ratio of the orthographic projection.
     * @param nearPlane The near plane distance.
     * @param farPlane The far plane distance.
     */
@@ -174,14 +175,26 @@ public:
     //override
     virtual void onEnter() override;
     virtual void onExit() override;
-    
-    static const Camera* getVisitingCamera() { return _visitingCamera; }
-    static Camera* getDefaultCamera();
 
+    /**
+     * Get the visiting camera , the visiting camera shall be set on Scene::render
+     */
+    static const Camera* getVisitingCamera() { return _visitingCamera; }
+
+    /**
+     * Get the default camera of the current running scene.
+     */
+    static Camera* getDefaultCamera();
+    
+    void clearBackground(float depth);
+    
 CC_CONSTRUCTOR_ACCESS:
     Camera();
     ~Camera();
     
+    /**
+     * Set the scene,this method shall not be invoke manually
+     */
     void setScene(Scene* scene);
     
     /**set additional matrix for the projection matrix, it multiplys mat to projection matrix when called, used by WP8*/
@@ -191,7 +204,7 @@ CC_CONSTRUCTOR_ACCESS:
     bool initDefault();
     bool initPerspective(float fieldOfView, float aspectRatio, float nearPlane, float farPlane);
     bool initOrthographic(float zoomX, float zoomY, float nearPlane, float farPlane);
-
+    
 protected:
 
     Scene* _scene; //Scene camera belongs to
