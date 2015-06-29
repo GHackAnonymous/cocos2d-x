@@ -214,7 +214,7 @@ void MeshCommand::applyRenderState()
         _depthTestEnabled ? glEnable(GL_DEPTH_TEST) : glDisable(GL_DEPTH_TEST);
     }
     
-    if (_depthWriteEnabled != _renderStateDepthWrite)
+    if ((GLboolean)_depthWriteEnabled != _renderStateDepthWrite)
     {
         glDepthMask(_depthWriteEnabled);
     }
@@ -237,7 +237,7 @@ void MeshCommand::restoreRenderState()
         _renderStateDepthTest ? glEnable(GL_DEPTH_TEST) : glDisable(GL_DEPTH_TEST);
     }
     
-    if (_depthWriteEnabled != _renderStateDepthWrite)
+    if ((GLboolean)_depthWriteEnabled != _renderStateDepthWrite)
     {
         glDepthMask(_renderStateDepthWrite);
     }
@@ -295,7 +295,8 @@ void MeshCommand::batchDraw()
     _glProgramState->applyGLProgram(_mv);
     _glProgramState->applyUniforms();
 
-    if (Director::getInstance()->getRunningScene()->getLights().size() > 0)
+    const auto& scene = Director::getInstance()->getRunningScene();
+    if (scene && scene->getLights().size() > 0)
         setLightUniforms();
     
     // Draw
@@ -337,7 +338,8 @@ void MeshCommand::execute()
     
     _glProgramState->apply(_mv);   
 
-    if (Director::getInstance()->getRunningScene()->getLights().size() > 0)
+    const auto& scene = Director::getInstance()->getRunningScene();
+    if (scene && scene->getLights().size() > 0)
         setLightUniforms();
     
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBuffer);
@@ -550,6 +552,9 @@ void MeshCommand::resetLightUniformValues()
 void MeshCommand::listenRendererRecreated(EventCustom* event)
 {
     _vao = 0;
+
+    // FIXME XXX BUG
+    CCASSERT(false, "Not implemented. Must recreate the previous state");
 }
 
 #endif

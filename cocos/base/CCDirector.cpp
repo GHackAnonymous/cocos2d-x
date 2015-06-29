@@ -107,6 +107,7 @@ Director* Director::getInstance()
 }
 
 Director::Director()
+: _isStatusLabelUpdated(true)
 {
 }
 
@@ -388,7 +389,7 @@ void Director::setOpenGLView(GLView *openGLView)
         // set size
         _winSizeInPoints = _openGLView->getDesignResolutionSize();
 
-        createStatsLabel();
+        _isStatusLabelUpdated = true;
 
         if (_openGLView)
         {
@@ -950,10 +951,6 @@ void Director::reset()
     
     // purge all managed caches
     
-//it will crash clang static analyzer so hide it if __clang_analyzer__ defined
-#ifndef __clang_analyzer__
-    DrawPrimitives::free();
-#endif
     AnimationCache::destroyInstance();
     SpriteFrameCache::destroyInstance();
     GLProgramCache::destroyInstance();
@@ -1076,6 +1073,11 @@ void Director::resume()
 // updates the FPS every frame
 void Director::showStats()
 {
+    if (_isStatusLabelUpdated)
+    {
+        createStatsLabel();
+        _isStatusLabelUpdated = false;
+    }
     static unsigned long prevCalls = 0;
     static unsigned long prevVerts = 0;
     static float prevDeltaTime  = 0.016f; // 60FPS
@@ -1221,7 +1223,7 @@ void Director::setContentScaleFactor(float scaleFactor)
     if (scaleFactor != _contentScaleFactor)
     {
         _contentScaleFactor = scaleFactor;
-        createStatsLabel();
+        _isStatusLabelUpdated = true;
     }
 }
 
