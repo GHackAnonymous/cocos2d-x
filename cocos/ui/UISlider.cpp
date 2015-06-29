@@ -48,16 +48,14 @@ _slidBallDisabledRenderer(nullptr),
 _slidBallRenderer(nullptr),
 _barLength(0.0),
 _percent(0),
+_maxPercent(100),
 _scale9Enabled(false),
 _prevIgnoreSize(true),
 _zoomScale(0.1f),
 _sliderBallNormalTextureScaleX(1.0),
 _sliderBallNormalTextureScaleY(1.0),
-_textureFile(""),
-_progressBarTextureFile(""),
-_slidBallNormalTextureFile(""),
-_slidBallPressedTextureFile(""),
-_slidBallDisabledTextureFile(""),
+_isSliderBallPressedTextureLoaded(false),
+_isSliderBallDisabledTexturedLoaded(false),
 _capInsetsBarRenderer(Rect::ZERO),
 _capInsetsProgressBarRenderer(Rect::ZERO),
 _sliderEventListener(nullptr),
@@ -152,7 +150,6 @@ void Slider::loadBarTexture(const std::string& fileName, TextureResType texType)
     {
         return;
     }
-    _textureFile = fileName;
     _barTexType = texType;
     switch (_barTexType)
     {
@@ -165,6 +162,16 @@ void Slider::loadBarTexture(const std::string& fileName, TextureResType texType)
         default:
             break;
     }
+    this->setupBarTexture();
+}
+void Slider::loadBarTexture(SpriteFrame* spriteframe)
+{
+    _barRenderer->initWithSpriteFrame(spriteframe);
+    this->setupBarTexture();
+}
+
+void Slider::setupBarTexture()
+{
     this->updateChildrenDisplayedRGBA();
     _barRendererAdaptDirty = true;
     _progressBarRendererDirty = true;
@@ -178,7 +185,6 @@ void Slider::loadProgressBarTexture(const std::string& fileName, TextureResType 
     {
         return;
     }
-    _progressBarTextureFile = fileName;
     _progressBarTexType = texType;
     switch (_progressBarTexType)
     {
@@ -191,6 +197,17 @@ void Slider::loadProgressBarTexture(const std::string& fileName, TextureResType 
         default:
             break;
     }
+    this->setupProgressBarTexture();
+}
+
+void Slider::loadProgressBarTexture(SpriteFrame* spriteframe)
+{
+    _progressBarRenderer->initWithSpriteFrame(spriteframe);
+    this->setupProgressBarTexture();
+}
+
+void Slider::setupProgressBarTexture()
+{
     this->updateChildrenDisplayedRGBA();
     _progressBarRenderer->setAnchorPoint(Vec2(0.0f, 0.5f));
     _progressBarTextureSize = _progressBarRenderer->getContentSize();
@@ -291,7 +308,6 @@ void Slider::loadSlidBallTextureNormal(const std::string& normal,TextureResType 
     {
         return;
     }
-    _slidBallNormalTextureFile = normal;
     _ballNTexType = texType;
     switch (_ballNTexType)
     {
@@ -306,6 +322,11 @@ void Slider::loadSlidBallTextureNormal(const std::string& normal,TextureResType 
     }
     this->updateChildrenDisplayedRGBA();
 }
+void Slider::loadSlidBallTextureNormal(SpriteFrame* spriteframe)
+{
+    _slidBallNormalRenderer->setSpriteFrame(spriteframe);
+    this->updateChildrenDisplayedRGBA();
+}
 
 void Slider::loadSlidBallTexturePressed(const std::string& pressed,TextureResType texType)
 {
@@ -313,8 +334,8 @@ void Slider::loadSlidBallTexturePressed(const std::string& pressed,TextureResTyp
     {
         return;
     }
-    _slidBallPressedTextureFile = pressed;
     _ballPTexType = texType;
+    _isSliderBallPressedTextureLoaded = true;
     switch (_ballPTexType)
     {
         case TextureResType::LOCAL:
@@ -329,13 +350,20 @@ void Slider::loadSlidBallTexturePressed(const std::string& pressed,TextureResTyp
     this->updateChildrenDisplayedRGBA();
 }
 
-    void Slider::loadSlidBallTextureDisabled(const std::string& disabled,TextureResType texType)
+
+void Slider::loadSlidBallTexturePressed(SpriteFrame* spriteframe)
+{
+    _slidBallPressedRenderer->setSpriteFrame(spriteframe);
+    this->updateChildrenDisplayedRGBA();
+}
+
+void Slider::loadSlidBallTextureDisabled(const std::string& disabled,TextureResType texType)
 {
     if (disabled.empty())
     {
         return;
     }
-    _slidBallDisabledTextureFile = disabled;
+    _isSliderBallDisabledTexturedLoaded = true;
     _ballDTexType = texType;
     switch (_ballDTexType)
     {
@@ -351,18 +379,34 @@ void Slider::loadSlidBallTexturePressed(const std::string& pressed,TextureResTyp
     this->updateChildrenDisplayedRGBA();
 }
 
+void Slider::loadSlidBallTextureDisabled(SpriteFrame* spriteframe)
+{
+    _slidBallDisabledRenderer->setSpriteFrame(spriteframe);
+    this->updateChildrenDisplayedRGBA();
+}
+
+void Slider::setMaxPercent(int percent)
+{
+    _maxPercent = percent;
+}
+
+int Slider::getMaxPercent()const
+{
+    return _maxPercent;
+}
+
 void Slider::setPercent(int percent)
 {
-    if (percent > 100)
+    if (percent > _maxPercent)
     {
-        percent = 100;
+        percent = _maxPercent;
     }
     if (percent < 0)
     {
         percent = 0;
     }
     _percent = percent;
-    float res = percent / 100.0f;
+    float res = 1.0 * percent / _maxPercent;
     float dis = _barLength * res;
     _slidBallRenderer->setPosition(dis, _contentSize.height / 2.0f);
     if (_scale9Enabled)
@@ -400,7 +444,7 @@ bool Slider::onTouchBegan(Touch *touch, Event *unusedEvent)
     {
         Vec2 nsp = convertToNodeSpace(_touchBeganPosition);
         setPercent(getPercentWithBallPos(nsp.x));
-        percentChangedEvent();
+        percentChangedEvent(EventType::ON_SLIDEBALL_DOWN);
     }
     return pass;
 }
@@ -410,22 +454,24 @@ void Slider::onTouchMoved(Touch *touch, Event *unusedEvent)
     _touchMovePosition = touch->getLocation();
     Vec2 nsp = convertToNodeSpace(_touchMovePosition);
     setPercent(getPercentWithBallPos(nsp.x));
-    percentChangedEvent();
+    percentChangedEvent(EventType::ON_PERCENTAGE_CHANGED);
 }
 
 void Slider::onTouchEnded(Touch *touch, Event *unusedEvent)
 {
     Widget::onTouchEnded(touch, unusedEvent);
+    percentChangedEvent(EventType::ON_SLIDEBALL_UP);
 }
 
 void Slider::onTouchCancelled(Touch *touch, Event *unusedEvent)
 {
     Widget::onTouchCancelled(touch, unusedEvent);
+    percentChangedEvent(EventType::ON_SLIDEBALL_CANCEL);
 }
 
 float Slider::getPercentWithBallPos(float px)const
 {
-    return ((px/_barLength)*100.0f);
+    return ((px/_barLength) * static_cast<float>(_maxPercent));
 }
 
 void Slider::addEventListenerSlider(Ref *target, SEL_SlidPercentChangedEvent selector)
@@ -439,7 +485,7 @@ void Slider::addEventListener(const ccSliderCallback& callback)
     _eventCallback = callback;
 }
 
-void Slider::percentChangedEvent()
+void Slider::percentChangedEvent(EventType event)
 {
     this->retain();
     if (_sliderEventListener && _sliderEventSelector)
@@ -448,7 +494,7 @@ void Slider::percentChangedEvent()
     }
     if (_eventCallback)
     {
-        _eventCallback(this, EventType::ON_PERCENTAGE_CHANGED);
+        _eventCallback(this,event);
     }
     if (_ccEventCallback)
     {
@@ -589,7 +635,7 @@ void Slider::onPressStateChangedToPressed()
     _slidBallNormalRenderer->setGLProgramState(this->getNormalGLProgramState());
 
     
-    if (_slidBallPressedTextureFile.empty())
+    if (!_isSliderBallPressedTextureLoaded)
     {
         _slidBallNormalRenderer->setScale(_sliderBallNormalTextureScaleX + _zoomScale,
                                           _sliderBallNormalTextureScaleY + _zoomScale);
@@ -604,7 +650,7 @@ void Slider::onPressStateChangedToPressed()
 
 void Slider::onPressStateChangedToDisabled()
 {
-    if (_slidBallDisabledTextureFile.empty())
+    if (!_isSliderBallDisabledTexturedLoaded)
     {
         _slidBallNormalRenderer->setGLProgramState(this->getGrayGLProgramState());
     }
@@ -648,12 +694,23 @@ void Slider::copySpecialProperties(Widget *widget)
     {
         _prevIgnoreSize = slider->_prevIgnoreSize;
         setScale9Enabled(slider->_scale9Enabled);
-        loadBarTexture(slider->_textureFile, slider->_barTexType);
-        loadProgressBarTexture(slider->_progressBarTextureFile, slider->_progressBarTexType);
-        loadSlidBallTextureNormal(slider->_slidBallNormalTextureFile, slider->_ballNTexType);
-        loadSlidBallTexturePressed(slider->_slidBallPressedTextureFile, slider->_ballPTexType);
-        loadSlidBallTextureDisabled(slider->_slidBallDisabledTextureFile, slider->_ballDTexType);
+        auto barSprite = slider->_barRenderer->getSprite();
+        if (nullptr != barSprite)
+        {
+            loadBarTexture(barSprite->getSpriteFrame());
+        }
+        auto progressSprite = slider->_progressBarRenderer->getSprite();
+        if (nullptr != progressSprite)
+        {
+            loadProgressBarTexture(progressSprite->getSpriteFrame());
+        }
+        loadSlidBallTextureNormal(slider->_slidBallNormalRenderer->getSpriteFrame());
+        loadSlidBallTexturePressed(slider->_slidBallPressedRenderer->getSpriteFrame());
+        loadSlidBallTextureDisabled(slider->_slidBallDisabledRenderer->getSpriteFrame());
         setPercent(slider->getPercent());
+        setMaxPercent(slider->getMaxPercent());
+        _isSliderBallPressedTextureLoaded = slider->_isSliderBallPressedTextureLoaded;
+        _isSliderBallDisabledTexturedLoaded = slider->_isSliderBallDisabledTexturedLoaded;
         _sliderEventListener = slider->_sliderEventListener;
         _sliderEventSelector = slider->_sliderEventSelector;
         _eventCallback = slider->_eventCallback;

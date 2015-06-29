@@ -95,7 +95,7 @@ void FileServer::addResFileInfo(const char* filename, uint64_t u64)
     filetimeValue.SetString(filetime, _filecfgjson.GetAllocator());
     rapidjson::Value filenameValue(rapidjson::kStringType);
     filenameValue.SetString(filename,_filecfgjson.GetAllocator());
-    _filecfgjson.AddMember(filenameValue.GetString(), filetimeValue, _filecfgjson.GetAllocator());
+    _filecfgjson.AddMember(filenameValue, filetimeValue, _filecfgjson.GetAllocator());
 }
 
 void FileServer::removeResFileInfo(const char *filename)
@@ -213,7 +213,6 @@ bool FileServer::listenOnTCP(int port)
     _receiveThread = std::thread(std::bind( &FileServer::loopReceiveFile, this));
     _writeThread = std::thread(std::bind(&FileServer::loopWriteFile, this));
     _responseThread = std::thread(std::bind(&FileServer::loopResponse, this));
-    _responseThread.detach();
     return true;
 }
 
